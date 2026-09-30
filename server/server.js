@@ -4,9 +4,12 @@ const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
+const cors = require('cors');
 
 const app = express();
-app.use(express.json({ limit: '10kb' }));
+app.set('trust proxy', 1);
+app.use(cors({ origin: process.env.CLIENT_ORIGIN }));
+app.use(express.json({ limit: '20kb' }));
 app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false }));
 
 const registrationSchema = new mongoose.Schema(
