@@ -7,7 +7,7 @@ const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 
 // Team size limits (keep in sync with client/src/components/RegistrationForm.jsx)
-const MIN_MEMBERS = 2;
+const MIN_MEMBERS = 3;
 const MAX_MEMBERS = 4;
 
 const app = express();
