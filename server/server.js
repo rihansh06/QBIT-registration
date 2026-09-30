@@ -6,21 +6,32 @@ const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 
+// Team size limits (keep in sync with client/src/components/RegistrationForm.jsx)
+const MIN_MEMBERS = 2;
+const MAX_MEMBERS = 4;
+
 const app = express();
 app.set('trust proxy', 1);
-app.use(cors({ origin: process.env.CLIENT_ORIGIN }));
+app.use(cors({ origin: (process.env.CLIENT_ORIGIN || '').replace(/\/+$/, '') }));
 app.use(express.json({ limit: '20kb' }));
 app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false }));
 
+const memberSchema = new mongoose.Schema(
+  {
+    name:   { type: String, required: true, maxlength: 80 },
+    phone:  { type: String, required: true },
+    email:  { type: String, required: true, lowercase: true, maxlength: 120 },
+    course: { type: String, required: true, maxlength: 100 },
+  },
+  { _id: false }
+);
+
 const registrationSchema = new mongoose.Schema(
   {
-    teamName:   { type: String, required: true, maxlength: 80 },
-    teamKey:    { type: String, required: true, unique: true }, // lowercase team name, blocks duplicates
-    memberName: { type: String, required: true, maxlength: 80 },
-    phone:      { type: String, required: true },
-    email:      { type: String, required: true, lowercase: true, maxlength: 120 },
-    college:    { type: String, required: true, maxlength: 150 },
-    course:     { type: String, required: true, maxlength: 100 },
+    teamName: { type: String, required: true, maxlength: 80 },
+    teamKey:  { type: String, required: true, unique: true }, // lowercase team name, blocks duplicates
+    college:  { type: String, required: true, maxlength: 150 },
+    members:  { type: [memberSchema], validate: (m) => m.length >= MIN_MEMBERS && m.length <= MAX_MEMBERS },
   },
   { timestamps: true }
 );
@@ -29,24 +40,35 @@ const Registration = mongoose.model('Registration', registrationSchema);
 const clean = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
 
 function validate(body) {
-  const data = {
-    teamName: clean(body.teamName),
-    memberName: clean(body.memberName),
-    phone: clean(body.phone).replace(/\D/g, ''),
-    email: clean(body.email).toLowerCase(),
-    college: clean(body.college),
-    course: clean(body.course),
-  };
-  if (data.phone.length === 12 && data.phone.startsWith('91')) data.phone = data.phone.slice(2);
-
   const errors = {};
-  if (data.teamName.length < 2) errors.teamName = 'Enter your team name.';
-  if (data.memberName.length < 2) errors.memberName = 'Enter the member\u2019s full name.';
-  if (!/^[6-9]\d{9}$/.test(data.phone)) errors.phone = 'Enter a valid 10-digit mobile number.';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email)) errors.email = 'Enter a valid email address.';
-  if (data.college.length < 3) errors.college = 'Enter your college name.';
-  if (data.course.length < 2) errors.course = 'Enter your course.';
-  return { data, errors };
+  const teamName = clean(body.teamName);
+  const college = clean(body.college);
+  if (teamName.length < 2) errors.teamName = 'Enter your team name.';
+  if (college.length < 3) errors.college = 'Enter your college name.';
+
+  const raw = Array.isArray(body.members) ? body.members : [];
+  if (raw.length < MIN_MEMBERS || raw.length > MAX_MEMBERS) {
+    errors.members = `A team needs ${MIN_MEMBERS} to ${MAX_MEMBERS} members.`;
+  }
+
+  const members = raw.slice(0, MAX_MEMBERS).map((m, i) => {
+    m = m || {};
+    const member = {
+      name: clean(m.name),
+      phone: clean(m.phone).replace(/\D/g, ''),
+      email: clean(m.email).toLowerCase(),
+      course: clean(m.course),
+    };
+    if (member.phone.length === 12 && member.phone.startsWith('91')) member.phone = member.phone.slice(2);
+
+    if (member.name.length < 2) errors[`members.${i}.name`] = 'Enter the member\u2019s full name.';
+    if (!/^[6-9]\d{9}$/.test(member.phone)) errors[`members.${i}.phone`] = 'Enter a valid 10-digit mobile number.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(member.email)) errors[`members.${i}.email`] = 'Enter a valid email address.';
+    if (member.course.length < 2) errors[`members.${i}.course`] = 'Enter the course.';
+    return member;
+  });
+
+  return { data: { teamName, college, members }, errors };
 }
 
 app.post('/api/register', async (req, res) => {
