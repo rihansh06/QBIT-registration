@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 // Team size limits (keep in sync with server/server.js)
-export const MIN_MEMBERS = 2;
+export const MIN_MEMBERS = 3;
 export const MAX_MEMBERS = 4;
 
 const TEAM_FIELDS = [
